@@ -31,6 +31,7 @@ Parse.Cloud.afterSave('Trip', function(request) {
 		// but we set it up now so it'll be ready if they ever switch their account
 
 		var roleName = "trunkMembersOf_" + trunk.id; // Unique role name
+		console.log("AfterSaveTrip - trunkMembersOf role name: " + roleName);
 		var acl = new Parse.ACL(request.user); // Only the creator of the trunk gets permission for the Role.
 		acl.setRoleReadAccess(roleName, true);
 		acl.setRoleWriteAccess(roleName, true);

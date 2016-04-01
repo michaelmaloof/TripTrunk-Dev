@@ -311,6 +311,7 @@ Parse.Cloud.beforeSave('Activity', function(request, response) {
 Parse.Cloud.afterSave('Activity', function(request) {
   // Only send push notifications for new activities
   if (request.object.existed()) {
+	  console.log("AfterSave: Object existed");
     return;
   }
 
@@ -405,17 +406,18 @@ var alertMessage = function(request) {
       message = "Someone commented on your photo.";
     }
   } else  if (request.object.get("type") === "mention") {
-	  var mentionType = "comment!";
-	  if(request.object.get("isCaption") ){
-		  mentionType = "photo caption!";
-	  }
+	 
+	  		var mentionType = "comment!";
+	  		if(request.object.get("isCaption") ){
+		  		mentionType = "photo caption!";
+	  		}
 	  
-    if (request.user.get("username") && request.user.get("name")) {
-      message = request.user.get("username") + " mentioned you in a " + mentionType;
-    } else {
-      message = "Someone mentioned you in a " + mentionType;
-    }
-	
+    		if (request.user.get("username") && request.user.get("name")) {
+      		  message = request.user.get("username") + " mentioned you in a " + mentionType;
+    		} else {
+      		  message = "Someone mentioned you in a " + mentionType;
+    		}
+	  
 	
   } else if (request.object.get("type") === "like") {
     if (request.user.get("username") && request.user.get("name")) {
@@ -496,6 +498,7 @@ var alertPayload = function(request) {
   } else if (request.object.get("type") === "addToTrip") {
     return {
       alert: alertMessage(request),
+	  badge: "Increment",
       p: 'a', // Payload Type: Activity
       t: 'a', // Activity Type: addToTrip
       tid: request.object.get('trip').id // Trip Id
@@ -503,6 +506,7 @@ var alertPayload = function(request) {
   } else if (request.object.get("type") === "pending_follow") {
     return {
       alert: alertMessage(request), // Set our alert message.
+	  badge: "Increment",
       p: 'a', // Payload Type: Activity
       t: 'f', // Activity Type: Pending_Follow
       fu: request.object.get('fromUser').id // From User

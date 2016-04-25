@@ -1,32 +1,236 @@
 var trunks = new Array();
+var trips = new Array();
+var tripIds = new Array();
+var friends = new Array();
+var initialLimit = 0;
 
-function getTrunksForUser(myObject,limit,callback) {
+Parse.Cloud.define("queryForUniqueTrunks", function(request, response) {
+    	var latitude = request.params.latitude;
+    	var longitude = request.params.longitude;
+    	var limit = parseInt(request.params.limit);
+    	var skip  = parseInt(request.params.skip);
+    	
+	for (var i = 0; i < parseInt(request.params.objectIds.length); i++) {
+		var friend = request.params.objectIds[i];
+		var friendObject = {
+  				__type: "Pointer",
+  				className: "_User",
+  				objectId: friend
+  				};
+		friends.push(friendObject);
+	}
+	
+		getTrunksForUser(limit,skip,latitude,longitude, {
+		success: function(returnValue) {
+			console.log("Performed first trunk query successfully");
+			//query again if we don't have as many trunks as the limit &
+			//if the limit is less than the amount in the query
+			if(trunks.length < limit && limit < initialLimit){
+				getTrunksForUser(limit,skip,latitude,longitude, {
+				success: function(returnValue) {
+				console.log("Performed second trunk query successfully");
+					//query again if we don't have as many trunks as the limit &
+					//if the limit is less than the amount in the query
+					if(trunks.length < limit && limit < initialLimit){
+						getTrunksForUser(limit,skip,latitude,longitude, {
+						success: function(returnValue) {
+						console.log("Performed third trunk query successfully");
+						//query again if we don't have as many trunks as the limit &
+						//if the limit is less than the amount in the query
+							if(trunks.length < limit && limit < initialLimit){
+								//We've maxed out the limit on queries which is 3
+								response.success(trunks);
+							}else{
+								response.success(trunks);
+							}
+						},
+						error: function(error) {
+							console.log("Performed third trunk query with failure");
+							response.error(error);
+						}
+						});
+										
+					}else{
+        					response.success(trunks);
+					}
+    				},
+    				error: function(error) {
+    					console.log("Performed second trunk query with failure");
+      					response.error(error);
+    				}
+  				});
+								
+			}else{
+        			response.success(trunks);
+			}
+    		},
+    			error: function(error) {
+    				console.log("Performed first trunk query with failure");
+      				response.error(error);
+    			}
+  		});
+});
+
+function getTrunksForUser(limit,skip,latitude,longitude,callback) {
     		var trunkQuery = new Parse.Query("Activity");
-  			trunkQuery.equalTo('type', "addToTrip");
-  			trunkQuery.equalTo('toUser', myObject); 
-  			trunkQuery.include('trip');
- 			trunkQuery.include('trip.publicTripDetail');
-  			trunkQuery.include('toUser');
- 			trunkQuery.include('creator');
- 			trunkQuery.include('createdAt');
-  			trunkQuery.descending('createdAt');
-  			trunkQuery.exists('trip');
-  			trunkQuery.limit = limit;
+  		trunkQuery.equalTo('type', "addToTrip");
+  		trunkQuery.containedIn('toUser', friends);
+		trunkQuery.notContainedIn('trip',trips);
+  		trunkQuery.include(['trip','trip.publicTripDetail']);
+  		trunkQuery.include('toUser');
+ 		trunkQuery.include(['trip','trip.creator']);
+ 		trunkQuery.include('createdAt');
+  		trunkQuery.descending('updatedAt');
+  		trunkQuery.exists('trip');
+  		trunkQuery.exists('fromUser');
+  		trunkQuery.exists('toUser');
+  		trunkQuery.limit(1000); //max the limit
+  		
+  		if(skip){
+  			trunkQuery.skip = skip;	
+  		}
+  		
+  		if(latitude){
+  			trunkQuery.equalTo("latitude",latitude);
+  		}
+  		
+  		if(longitude){
+  			trunkQuery.equalTo("longitude",longitude);
+  		}
   
-  			var objects = new Array();
+  		var objects = new Array();
+		//query db for trunks
     		trunkQuery.find().then(function (objects) {
-				for (var i = 0; i < objects.length; i++) {
-					var object = objects[i];
-					if(!containsObject(object,trunks)){
-						//add objec to trunk array
-						trunks.push(object);
+			initialLimit += objects.length;
+			for (var i = 0; i < objects.length; i++) {
+				var object = objects[i];
+				var trip = object.get("trip");
+				if(trip){
+					var publicTrip = trip.get("publicTripDetail");
+					if(publicTrip || Parse.User.current().id == trip.get("creator").id){
+						var tripId = trip.id;
+						if(!containsObject(tripId,tripIds)){
+							if(trip.get("creator")){
+								trips.push(trip);
+								tripIds.push(tripId);
+								var acl = trip.get("ACL");
+								if(acl.getReadAccess(Parse.User.current()) || acl.getPublicReadAccess()){
+									//add object to trunk array
+									trunks.push(object);
+								}
+							}
+							//check if the return limit has been reached
+							if(trunks.length >= limit){
+								break; //this is where we enforce the limit
+							}
+						}
+					}else{
+						console.log("The trip ("+trip.get('name')+" in "+trip.get('city')+") is missing it's publicTripDetail");
+					}
+				}else{
+					console.log("The activity " + object.id + " is missing it's Trip");
+				}
+			}
+			trunks.sort(date_sort_desc);
+			callback.success(trunks);
+				
+    		}, function (error) {
+			callback.error("Error with trunkQuery.find() "+error);
+    		});
+}
+
+Parse.Cloud.define("queryForMutualTrunks", function(request, response) {
+	var limit = parseInt(request.params.limit);
+
+		var user1Object = {
+  			__type: "Pointer",
+  			className: "_User",
+  			objectId: request.params.user1
+  		};
+  		
+  		var user2Object = {
+  			__type: "Pointer",
+  			className: "_User",
+  			objectId: request.params.user2
+  		};
+  		
+	getMutualTrunks(limit,user1Object,user2Object, {
+		success: function(returnValue) {
+			console.log("Performed first trunk query successfully");
+        		response.success(trunks);
+    		},
+    			error: function(error) {
+    				console.log("Performed first trunk query with failure");
+      				response.error(error);
+    			}
+  		});
+});
+
+function getMutualTrunks(limit,user1,user2,callback){    
+		
+    	var trunkQuery1 = new Parse.Query("Activity");
+    	trunkQuery1.equalTo('toUser',user1);
+  	trunkQuery1.equalTo('type', "addToTrip");
+  	
+  	var trunkQuery2 = new Parse.Query("Activity");
+    	trunkQuery2.equalTo('toUser',user2);
+  	trunkQuery2.equalTo('type', "addToTrip");
+  	
+  	var subQuery = Parse.Query.or(trunkQuery1,trunkQuery2);
+  	subQuery.include(['trip','trip.publicTripDetail']);
+  	subQuery.include(['trip','trip.creator']);
+  	subQuery.exists('fromUser');
+  	subQuery.exists('toUser');
+  	subQuery.exists('trip');
+  	subQuery.descending('updatedAt');
+  	subQuery.limit = limit;
+  	
+  	var mutualTrips = new Array();
+  	var user2Trips = new Array();
+  	
+  	subQuery.find().then(function (objects) {	
+		for (var i = 0; i < objects.length; i++) {
+			var object = objects[i];
+			var trip = object.get("trip")
+			if(trip){
+				var publicTrip = trip.get("publicTripDetail");
+				if(publicTrip || Parse.User.current().id == trip.get("creator").id){
+				for(var x = 0; x < objects.length; x++) {
+					var compareObject = objects[x];
+					var compareTrip = compareObject.get("trip")
+					if(compareTrip){
+						var tripId = trip.id;
+					if(!containsObject(tripId,tripIds)){
+						if(object.get("fromUser") != compareObject.get("fromUser")){
+							if(trip.id == compareTrip.id){
+								if(trip.get("creator")){
+									tripIds.push(tripId);
+									var acl = trip.get("ACL");
+									if(acl.getReadAccess(Parse.User.current()) || acl.getPublicReadAccess()){
+										//add object to trunk array
+										trunks.push(object);
+									}
+								}
+							}					
+						}
+					}
+					}else{
+						console.log("The activity " + object.id + " is missing it's Trip (while comparing)");
 					}
 				}
-        		callback.success(trunks);
-    		}, function (error) {
-        		//handle error here
-				callback.error("Error");
-    		});
+				}else{
+					console.log("The trip ("+trip.get('name')+" in "+trip.get('city')+") is missing it's publicTripDetail");
+				}
+			}else{
+				console.log("The activity " + object.id + " is missing it's Trip");
+			}
+		}
+		trunks.sort(date_sort_desc);
+		callback.success(trunks);  	
+  	}, function (error) {
+		callback.error("Error with getMutualTrunks subQuery.find()"+error);
+    	});
+	
 }
 
 function containsObject(obj, list) {
@@ -40,61 +244,22 @@ function containsObject(obj, list) {
     return false;
 }
 
-Parse.Cloud.define("queryForUniqueTrunks", function(request, response) {
-	var MyObject = Parse.Object.extend("User"); 
-    var myObject = new MyObject(); 
+var date_sort_asc = function (obj1, obj2) {
+	var trip = obj1.get("trip").get("mostRecentPhoto")
+	var date1 = new Date(trip);
+	var trip = obj2.get("trip").get("mostRecentPhoto")
+	var date2 = new Date(trip);
+  if (date1 > date2) return 1;
+  if (date1 < date2) return -1;
+  return 0;
+};
 
-    myObject.id = request.params.objectId;
-    myObject.fetch().then
-    (
-        function( myObject ){
-			getTrunksForUser(myObject,parseInt(request.limit), {
-    			success: function(returnValue) {
-      				response.success(trunks);
-    			},
-    			error: function(error) {
-      				response.error(error);
-    			}
-  			});
-			
-			
-            //var trunkQuery = new Parse.Query("Activity");
-  			//trunkQuery.equalTo('type', "addToTrip");
-  			//trunkQuery.equalTo('toUser', myObject); 
-  			//trunkQuery.include('trip');
- 			//trunkQuery.include('trip.publicTripDetail');
-  			//trunkQuery.include('toUser');
- 			//trunkQuery.include('creator');
- 			//trunkQuery.include('createdAt');
-  			//trunkQuery.descending('createdAt');
-  			//trunkQuery.exists('trip');
-  			//trunkQuery.limit = parseInt(request.limit);
-  
-  			//var objects = new Array();
-    		//trunkQuery.find().then(function (objects) {
-			//	for (var i = 0; i < objects.length; i++) {
-			//		var object = objects[i];
-			//		if(!containsObject(object,trunks)){
-			//			//add objec to trunk array
-			//			trunks.push(object);
-			//		}
-			//	}
-        	//	response.success(trunks);
-    		//}, function (error) {
-        	//	response.error(error);
-    		//});
-        },
-        function( error ) {
-            response.error("There was an error trying to fetch User with objectId " + request.params.objectId + ": " + error.message);
-        }
-    );
-});
-
-//Parse.Cloud.beforeSave('trunkQuery', function(request) {
-	
-//});
-
-//Parse.Cloud.afterSave('trunkQuery', function(request) {
-	
-//});
-
+var date_sort_desc = function (obj1, obj2) {
+	var trip = obj1.get("trip").get("mostRecentPhoto")
+	var date1 = new Date(trip);
+	var trip = obj2.get("trip").get("mostRecentPhoto")
+	var date2 = new Date(trip);
+  if (date1 > date2) return -1;
+  if (date1 < date2) return 1;
+  return 0;
+};

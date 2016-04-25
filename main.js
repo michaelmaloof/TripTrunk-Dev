@@ -12,6 +12,7 @@ require('cloud/trunk.js');
 require('cloud/updateFriendRoles.js');
 require('cloud/pushNotifications.js');
 require('cloud/homeMapAndList.js');
+//require('cloud/databaseFunctions.js');
 
 /*
 TODO: timeouts happen on Follows.

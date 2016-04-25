@@ -1,3 +1,24 @@
+//return number of notificatons since last logoff
+Parse.Cloud.define("queryForActivityNotifications", function(request, response) {
+    
+    var date = new Date(request.params.date);
+  	
+        var notificationQuery = new Parse.Query("Activity");
+        notificationQuery.equalTo('toUser', Parse.User.current());
+        notificationQuery.notEqualTo('fromUser', Parse.User.current());
+        notificationQuery.greaterThan('updatedAt',date);
+        
+        notificationQuery.count({
+            success: function(count) {
+            response.success(count);    
+            },
+            error:function (error) {
+                response.error(error);
+                console.log("Could not count activities: " + error.message);
+            }
+        } );
+});
+
 
 /**
  * Adds the fromUser to the toUser's friendsOf_ role.
@@ -465,8 +486,9 @@ var alertPayload = function(request) {
 
   if (request.object.get("type") === "comment") {
     return {
+      'content-available': 1,
       alert: alertMessage(request), // Set our alert message.
-      // badge: 'Increment', // Increment the target device's badge count.
+      //badge: 'Increment', 
       p: 'a', // Payload Type: Activity
       t: 'c', // Activity Type: Comment
       fu: request.object.get('fromUser').id, // From User
@@ -474,14 +496,17 @@ var alertPayload = function(request) {
     };
   } else if (request.object.get("type") === "mention") {
 	  return {
-	  	alert: alertMessage(request), // Set our alert message.
-	  	p: 'a', // Payload Type: Activity
+        'content-available': 1,
+	alert: alertMessage(request), // Set our alert message.
+	//badge: 'Increment', 
+	p: 'a', // Payload Type: Activity
       	t: 'm', // Activity Type: Mention
       	fu: request.object.get('fromUser').id, // From User
 		pid: request.object.get('photo').id // Photo Id
 	  };
   } else if (request.object.get("type") === "like") {
     return {
+      'content-available': 1,
       alert: alertMessage(request), // Set our alert message.
       p: 'a', // Payload Type: Activity
       t: 'l', // Activity Type: Like
@@ -490,6 +515,7 @@ var alertPayload = function(request) {
     };
   } else if (request.object.get("type") === "follow") {
     return {
+      'content-available': 1,
       alert: alertMessage(request), // Set our alert message.
       p: 'a', // Payload Type: Activity
       t: 'f', // Activity Type: Follow
@@ -497,16 +523,18 @@ var alertPayload = function(request) {
     };
   } else if (request.object.get("type") === "addToTrip") {
     return {
+      'content-available': 1,
       alert: alertMessage(request),
-	  badge: "Increment",
+      badge: "Increment",
       p: 'a', // Payload Type: Activity
       t: 'a', // Activity Type: addToTrip
       tid: request.object.get('trip').id // Trip Id
     }
   } else if (request.object.get("type") === "pending_follow") {
     return {
+      'content-available': 1,
       alert: alertMessage(request), // Set our alert message.
-	  badge: "Increment",
+      badge: "Increment",
       p: 'a', // Payload Type: Activity
       t: 'f', // Activity Type: Pending_Follow
       fu: request.object.get('fromUser').id // From User

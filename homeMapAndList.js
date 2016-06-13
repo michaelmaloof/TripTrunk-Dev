@@ -245,9 +245,9 @@ function containsObject(obj, list) {
 }
 
 var date_sort_asc = function (obj1, obj2) {
-	var trip = obj1.get("trip").get("mostRecentPhoto")
+	var trip = obj1.get("trip").get("mostRecentPhoto");
 	var date1 = new Date(trip);
-	var trip = obj2.get("trip").get("mostRecentPhoto")
+	var trip = obj2.get("trip").get("mostRecentPhoto");
 	var date2 = new Date(trip);
   if (date1 > date2) return 1;
   if (date1 < date2) return -1;
@@ -255,9 +255,9 @@ var date_sort_asc = function (obj1, obj2) {
 };
 
 var date_sort_desc = function (obj1, obj2) {
-	var trip = obj1.get("trip").get("mostRecentPhoto")
+	var trip = obj1.get("trip").get("mostRecentPhoto");
 	var date1 = new Date(trip);
-	var trip = obj2.get("trip").get("mostRecentPhoto")
+	var trip = obj2.get("trip").get("mostRecentPhoto");
 	var date2 = new Date(trip);
   if (date1 > date2) return -1;
   if (date1 < date2) return 1;

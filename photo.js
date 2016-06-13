@@ -33,6 +33,8 @@ Parse.Cloud.afterSave('Photo', function(request) {
    */
     trip.set("mostRecentPhoto", new Date());
     trip.save();
+                    
+    var creator = trip.get("creator");
 
     // Create an Activity for addedPhoto
     var Activity = Parse.Object.extend("Activity");
@@ -41,7 +43,14 @@ Parse.Cloud.afterSave('Photo', function(request) {
     photoActivity.set("photo", request.object);
     photoActivity.set("trip", trip);
     photoActivity.set("fromUser", request.user);
-    photoActivity.set("toUser", trip.get("creator"));
+    photoActivity.set("toUser", creator);
+                    
+    var acl = new Parse.ACL(request.user);
+    acl.setPublicReadAccess(true);
+    acl.setWriteAccess(creator, true);
+    photoActivity.setACL(acl);
+                    
+                    
     photoActivity.save();
 
   });

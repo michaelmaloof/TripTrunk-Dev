@@ -140,6 +140,7 @@ Parse.Cloud.define("becomePrivate", function(request, response) {
  * No Parameters
  */
 Parse.Cloud.define("becomePublic", function(request, response) {
+    console.log("running becomePublic");
   Parse.Cloud.useMasterKey();
   var user = request.user;
 
@@ -185,6 +186,39 @@ Parse.Cloud.define("becomePublic", function(request, response) {
     });
 
     return photoPromise;
+  }).then(function(automaticFollowApproval) {
+        var query = new Parse.Query('Activity');
+        query.equalTo('toUser', request.user);
+        query.equalTo('type', "pending_follow");
+        query.exists('fromUser');
+        query.limit(10000);
+        return query.find();
+        
+  }).then(function(updateFollow) {
+    var followPromise = Parse.Promise.as();
+    _.each(updateFollow, function(follow) {
+      followPromise = followPromise.then(function() {
+        follow.set("type","follow");
+	var acl = follow.getACL();
+        acl.setPublicReadAccess(true);
+        follow.setACL(acl);
+        return follow.save();
+      });
+    });
+    
+    return followPromise;
+    
+  }).then(function(activity) {
+          var promises = [];
+          if(activity){
+            var fromUser = activity.get("fromUser");
+            if(fromUser){
+                promises.push(addToFriendRole(fromUser.id, request.user.id));
+            }
+                promises.push(sendPushNotificationForAcceptedFollowRequest(activity, request));
+            }
+          return Parse.Promise.when(promises);
+    
   }).then(function() {
     response.success("Success! - Account Now Public");
   }, function(error) {

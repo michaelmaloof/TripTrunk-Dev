@@ -19,6 +19,312 @@ Parse.Cloud.define("queryForActivityNotifications", function(request, response) 
         } );
 });
 
+//build complete news feed
+Parse.Cloud.define("queryForNewsFeedOld", function(request, response) {
+	console.log("Running queryForNewsFeed");
+        var trips = new Array();
+        var followees = new Array();
+        var filteredTrips = new Array();
+        var tripPhotos = new Array();
+        var allTrips = new Array();
+//         var dictionary = {};
+  		
+        var memberQuery = new Parse.Query("Activity");
+        memberQuery.equalTo('toUser', Parse.User.current());
+        memberQuery.equalTo('type', 'addToTrip');
+        memberQuery.exists('fromUser');
+        memberQuery.descending('createdAt');
+        memberQuery.limit(100);
+        
+        memberQuery.find().then(function (objects) {
+		for(i=0;i<objects.length;i++){
+		    var object = objects[i];
+		    trips.push(object.get("trip"));
+		}
+		
+		for (var i = 0; i < parseInt(request.params.objectIds.length); i++) {
+		    var followee = request.params.objectIds[i];
+		    var followeeObject = {
+  				__type: "Pointer",
+  				className: "_User",
+  				objectId: followee
+  				};
+  		  followees.push(followeeObject);
+	        }
+  				
+		var photoQuery1 = new Parse.Query("Activity");
+		photoQuery1.equalTo('type', 'addedPhoto');
+		photoQuery1.exists('trip');
+		photoQuery1.descending('createdAt');
+		photoQuery1.containedIn('fromUser', followees);
+		photoQuery1.notContainedIn('objectId',request.params.activityObjectIds);
+		var createdAt = new Date(request.params.createdDate);
+		if(request.params.isRefresh == "YES"){
+		    photoQuery1.greaterThanOrEqualTo('createdAt',createdAt);
+		}else{
+		    photoQuery1.lessThanOrEqualTo('createdAt',createdAt);
+		}
+		
+		var photoQuery2 = new Parse.Query("Activity");
+		photoQuery2.equalTo('type', 'addedPhoto');
+		photoQuery2.containedIn('trip', trips);
+		photoQuery2.notContainedIn('objectId',request.params.activityObjectIds);
+		photoQuery2.exists('trip');
+		photoQuery2.descending('createdAt');
+		if(request.params.isRefresh == "YES"){
+		    photoQuery2.greaterThanOrEqualTo('createdAt',createdAt);
+		}else{
+		    photoQuery2.lessThanOrEqualTo('createdAt',createdAt);
+		}
+		
+		var subQuery = Parse.Query.or(photoQuery1,photoQuery2);
+		subQuery.include('fromUser');
+		subQuery.include('photo');
+		subQuery.include('trip','trip.publicTripDetail');
+		subQuery.exists('trip');
+		subQuery.exists('fromUser');
+		subQuery.exists('toUser');
+		subQuery.descending('createdAt');
+// 		subQuery.limit(20);
+		
+		subQuery.find().then(function (objects) {
+		    for(var i=0; i<objects.length;i++){
+		        var object = objects[i];
+		        var savedTripIndex = containsTripObject(object,filteredTrips);
+		        if(savedTripIndex == -1){ //not found
+		            filteredTrips.push(object); //main photo
+		            if(object.get("trip").id =="8G5JRKGFsD" && object.get("fromUser").id == "WpmmWKEm4M"){
+					console.log("saved main photo: "+object.get("photo").id);
+				}
+		        }else if(savedTripIndex > -1){ //found at index
+				tripPhotos.push(object); //sub photos
+				if(object.get("trip").id =="8G5JRKGFsD" && object.get("fromUser").id == "WpmmWKEm4M"){
+					console.log("saved subphoto: "+object.get("photo").id);
+				}
+				//created dictionary for photo count
+// 				var trip = object.get("trip");
+// 				var user = object.get("photo").get("user");
+// 				var count = dictionary[trip.id+"."+user.id];
+// 				if(count){
+// 					dictionary[trip.id+"."+user.id] = count+1;
+// 				}else{
+// 					dictionary[trip.id+"."+user.id] = 1;
+// 				}	
+		        }
+		    }
+		    
+
+// 		    for(var x=0;x<filteredTrips.length;x++){
+// 		    var ftObject = filteredTrips[x];
+// 		    var trip = ftObject.get("trip");
+// 		    if(trip){
+// 		    	var tripDetail = trip.get("publicTripDetail");
+// 		    	if(tripDetail){
+// 		    		var photoCount = tripDetail.get("photoCount"); //this is not ideal because this is for all users
+// 		    		if(photoCount){
+// 		    			var user = ftObject.get("photo").get("user");
+// 		    			var count = dictionary[trip.id+"."+user.id];
+// 		    			if(count != photoCount && count<5){ //this will only prevent hitting the DB when a single user is the only photo owner
+// 		    				//now we have to check the database to see if there are more photos for this trunk	
+// 		    				
+// 		    				console.log("Running query");
+// 		    				var spQuery = new Parse.Query("Photo");
+// 						spQuery.equalTo('trip', trip);
+// 						spQuery.equalTo('user',user);
+// 						spQuery.notContainedIn('objectId',tripPhotos);
+// 						spQuery.limit(5); //ideally we would subtract the num of photos we already have
+// 						spQuery.find().then(function (objects) {
+// 							console.log("query finished");
+// 							for(var i=0; i<objects.length;i++){
+// 		        					var object = objects[i];
+// 		        					tripPhotos.push(object);
+// 		        				}
+// 						}, function (error) {
+// 		    					console.log("Error with spQuery.find(): "+error.message);
+//     	        				});
+// 		    			}
+// 		    		}
+// 		    	}	
+// 		    }
+		    
+		    if(request.params.isRefresh == "YES"){
+		    	tripPhotos.sort(date_sort_asc);
+		    }
+		    
+		    filteredTrips.sort(date_sort_desc);
+		    allTrips.push(filteredTrips);
+		    allTrips.push(tripPhotos);
+		    response.success(allTrips);
+		}, function (error) {
+			response.error("Error with queryForNewsFeed subQuery.find(): "+error.message);
+    		});
+			
+  	}, function (error) {
+		response.error("Error with queryForNewsFeed memberQuery.find(): "+error.message);
+    	});
+});
+
+Parse.Cloud.define("queryForNewsFeed", function(request, response) {
+	
+	var followees = new Array();
+	var mainPhotos = new Array();
+	var photos = new Array();
+	var subPhotos = new Array();
+	var allPhotos = new Array();
+	var userTrips = new Array();
+	
+	for (var i = 0; i < parseInt(request.params.objectIds.length); i++) {
+	var followee = request.params.objectIds[i];
+	var followeeObject = {
+  		__type: "Pointer",
+  		className: "_User",
+  		objectId: followee
+  		};
+  		
+  		followees.push(followeeObject);
+	}
+	
+	var photoQuery = new Parse.Query("Activity");
+	photoQuery.descending('updatedAt');
+	photoQuery.equalTo('type', 'addedPhoto');
+	photoQuery.containedIn('fromUser', followees);
+	photoQuery.notContainedIn('objectId',request.params.activityObjectIds);
+	var createdAt = new Date(request.params.createdDate);
+		if(request.params.isRefresh == "YES"){
+		    photoQuery.greaterThanOrEqualTo('createdAt',createdAt);
+		}else{
+		    photoQuery.lessThanOrEqualTo('createdAt',createdAt);
+		}
+	
+	photoQuery.include('fromUser');
+	photoQuery.include('photo');
+	photoQuery.include('trip','trip.publicTripDetail');
+	photoQuery.exists('trip');
+	photoQuery.exists('fromUser');
+	photoQuery.exists('toUser');
+		
+	photoQuery.limit(200);
+		
+	photoQuery.find().then(function(objects) {
+		for(var i=0; i<objects.length;i++){
+			var object = objects[i];
+			var savedTripIndex = containsTripObject(object,mainPhotos);
+			if(savedTripIndex == -1){ //not found
+				var trip = object.get('trip');
+				if(trip){
+					if(request.params.isRefresh == "YES"){
+						mainPhotos.push(object); //main photo
+		            			photos.push(object.get("photo"));
+					}else{
+						if(!containsObject(trip.id+"."+object.get('fromUser').id,request.params.userTrips)){
+							mainPhotos.push(object); //main photo
+		            				photos.push(object.get("photo"));
+		            				userTrips.push(trip.id+"."+object.get('fromUser').id);
+						}
+					}
+		            		
+		        	}
+		        }
+		}
+		
+		var subQuery = new Parse.Query("Activity");
+		subQuery.descending('updatedAt');
+		subQuery.equalTo('type', 'addedPhoto');
+		subQuery.notContainedIn('photo',photos);
+		subQuery.notContainedIn('objectId',request.params.activityObjectIds);
+		subQuery.containedIn('fromUser', followees);
+		
+		subQuery.include('fromUser');
+		subQuery.include('photo');
+		subQuery.include('trip','trip.publicTripDetail');
+		subQuery.exists('trip');
+		subQuery.exists('fromUser');
+		subQuery.exists('toUser');
+		
+		subQuery.limit(200);
+		
+		subQuery.find().then(function(objects) {
+			for(var i=0; i<objects.length;i++){
+			var object = objects[i];
+			    var trip = object.get('trip');
+			    if(trip){
+// 		            	if(request.params.isRefresh == "YES"){
+						subPhotos.push(object); 
+// 					}else{
+// 						if(!containsObject(trip.id+"."+object.get('fromUser').id,request.params.userTrips)){
+// 							subPhotos.push(object); 
+// 		            				userTrips.push(trip.id+"."+object.get('fromUser').id);
+// 						}
+// 					}
+		           }
+		}
+		
+		mainPhotos.sort(date_sort_desc);
+		if(request.params.isRefresh == "YES"){
+		    subPhotos.sort(date_sort_asc);
+		 }
+		    
+			allPhotos.push(mainPhotos);
+			allPhotos.push(subPhotos);
+			allPhotos.push(userTrips);
+			response.success(allPhotos);
+		
+		});
+	}, function (error) {
+		response.error("Error with queryForNewsFeed or query: "+error.message);
+    	});
+});
+
+function containsObject(obj, list) {
+    var i;
+    for (i = 0; i < list.length; i++) {
+        if (list[i] === obj) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function containsTripObject(obj, list) {
+    var i;
+    for (i = 0; i < list.length; i++) {
+    	if(obj.get("trip") && list[i].get("trip")){
+        	if (list[i].get("trip").id == obj.get("trip").id) {
+        		if(list[i].get("fromUser") && obj.get("fromUser")){
+        			if(list[i].get("fromUser").id == obj.get("fromUser").id){
+            				return i;
+            			}
+            		}
+        	}
+        }else{
+        	return -2;	
+        }
+    }
+
+    return -1;
+}
+
+var date_sort_asc = function (obj1, obj2) {
+	var trip = obj1.get("createdAt");
+	var date1 = new Date(trip);
+	var trip = obj2.get("createdAt");
+	var date2 = new Date(trip);
+  if (date1 > date2) return 1;
+  if (date1 < date2) return -1;
+  return 0;
+};
+
+var date_sort_desc = function (obj1, obj2) {
+	var trip = obj1.get("createdAt");
+	var date1 = new Date(trip);
+	var trip = obj2.get("createdAt");
+	var date2 = new Date(trip);
+  if (date1 > date2) return -1;
+  if (date1 < date2) return 1;
+  return 0;
+};
+
 
 /**
  * Adds the fromUser to the toUser's friendsOf_ role.
@@ -90,6 +396,9 @@ Parse.Cloud.define("addToTrip", function(request, response) {
   
   var toUser = new Parse.User();
   toUser.id = request.params.toUserId;
+                   
+  var creator = new Parse.User();
+  creator.id = request.params.tripCreatorId;
 
   var Trip = Parse.Object.extend("Trip");
   var trip = new Trip();
@@ -175,6 +484,7 @@ Parse.Cloud.define("addToTrip", function(request, response) {
     var acl = new Parse.ACL(fromUser);
     acl.setPublicReadAccess(true); // Initially, we set up the Role to have public
     acl.setWriteAccess(toUser, true); // We give public write access to the role also - Anyone can decide to be someone's friend (aka follow them)
+    acl.setWriteAccess(creator, true);
     activity.setACL(acl);
     return activity.save();
     
